@@ -28,15 +28,13 @@ fn panic_handler(info: &core::panic::PanicInfo) -> ! {
     println!("Backtrace:");
     println!(" ");
 
-    let backtrace = crate::arch::backtrace();
+    let mut backtrace = crate::arch::backtrace().into_iter().peekable();
     #[cfg(target_arch = "riscv32")]
-    if backtrace.iter().filter(|e| e.is_some()).count() == 0 {
+    if let None = backtrace.peek() {
         println!("No backtrace available - make sure to force frame-pointers. (see https://crates.io/crates/esp-backtrace)");
     }
-    for e in backtrace {
-        if let Some(addr) = e {
-            println!("0x{:x}", addr);
-        }
+    for addr in backtrace {
+        println!("0x{:x}", addr);
     }
 
     halt();
@@ -99,14 +97,12 @@ fn exception_handler(context: &arch::TrapFrame) -> ! {
     );
     println!("{:x?}", context);
 
-    let backtrace = crate::arch::backtrace_internal(context.s0 as u32, 0);
-    if backtrace.iter().filter(|e| e.is_some()).count() == 0 {
+    let mut backtrace = crate::arch::FrameIter { fp: context.s0 }.peekable();
+    if let None = backtrace.peek() {
         println!("No backtrace available - make sure to force frame-pointers. (see https://crates.io/crates/esp-backtrace)");
     }
-    for e in backtrace {
-        if let Some(addr) = e {
-            println!("0x{:x}", addr);
-        }
+    for addr in backtrace {
+        println!("0x{:x}", addr);
     }
 
     println!("");
@@ -123,7 +119,7 @@ fn exception_handler(context: &arch::TrapFrame) -> ! {
 //
 // Address ranges can be found in `components/soc/$CHIP/include/soc/soc.h` as
 // `SOC_DRAM_LOW` and `SOC_DRAM_HIGH`.
-fn is_valid_ram_address(address: u32) -> bool {
+fn is_valid_ram_address(address: usize) -> bool {
     if (address & 0xF) != 0 {
         return false;
     }
